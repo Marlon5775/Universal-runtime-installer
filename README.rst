@@ -1,10 +1,8 @@
-.. image:: https://img.shields.io/badge/-Download-brightgreen
-   :alt: Download
-   :target: https://github.com/Manily04/Universal-runtime-installer/releases/download/v1/Universal.runtime.installer.exe
+.. image:: https://img.shields.io/badge/Download%20now-green?link=https%3A%2F%2Fgithub.com%2FManily04%2FUniversal-runtime-installer%2Freleases%2Flatest
+.. image:: https://img.shields.io/github/downloads/Manily04/Universal-runtime-installer/total?style=plastic&label=Downloads&color=blue
 
-.. image:: https://img.shields.io/github/downloads/Manily04/Universal-runtime-installer/total?label=Downloads
-   :alt: Total Downloads
-   :target: https://github.com/Manily04/Universal-runtime-installer/releases/latest
+
+
 
 New and Improed with a GUI
 =============================== 
