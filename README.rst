@@ -6,9 +6,9 @@
    :alt: Total Downloads
    :target: https://github.com/Manily04/Universal-runtime-installer/releases/latest
 
-OUT OF SUPPORT! 
+New and Improed with a GUI
 =============================== 
-This version of the installer has been replaced by `my new project <https://github.com/Manily04/Universal-runtime-installer/>`_!
+This version is a complete rework of my old project now in Python instead of Batch and PowerShell.
 
 Universal runtime installer
 ===============================
