@@ -4,7 +4,7 @@
 
 
 
-New and Improed with a GUI
+New and Improved with a GUI
 =============================== 
 This version is a complete rework of my old project now in Python instead of Batch and PowerShell.
 
