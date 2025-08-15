@@ -21,19 +21,18 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r "Universal runtime installer/requirements.txt"
+          pip install -r requirements.txt
 
       - name: Build executable (PyInstaller)
-        working-directory: "Universal runtime installer"
         run: |
-          pyinstaller --clean --noconfirm "Universal runtime installer.py" --icon logo.ico --name "Universal runtime installer" --add-data "logo.ico;." --distpath dist --workpath build
+          pyinstaller --clean --noconfirm "Universal runtime installer.py" --icon "logo.ico" --name "Universal runtime installer" --add-data "logo.ico;." --distpath dist --workpath build
 
       - name: Archive artifact
         uses: actions/upload-artifact@v4
         with:
           name: universal-runtime-installer
           path: |
-            Universal runtime installer/dist/**
+            dist/**
 
   release:
     needs: build
