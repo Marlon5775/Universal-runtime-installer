@@ -20,3 +20,29 @@ offline setup
 ===============================
 If you don't have an internet connection on the PC to be installed, you can use the old `offline setup <https://github.com/Manily04/Universal-runtime-installer-EN/releases/tag/v1>`__ because they still have all Visual Studio 2008 - 2022 Runtimes in the installer, but no more - Update status of `v1 <https://github.com/Manily04/Universal-runtime-installer-EN/releases/tag/v1>`_ - April 2022 (OUTDATET CMD TOOL)
 
+Silent / Unattended Mode
+==================================
+From the GUI version onward you can run the installer fully unattended. Launch the EXE with one of these switches to install all bundled runtimes without any user interaction (all packages are selected automatically):
+
+``/silent`` ``-silent`` ``--silent`` ``/s`` ``-s``
+
+Example (PowerShell):
+
+```powershell
+./Universal runtime installer.exe /silent
+```
+
+Return codes:
+
+* 0 – All installations succeeded
+* 1 – winget not found (aborted)
+* 2 – Some packages failed (check log)
+
+Silent mode log file (with error details):
+``%TEMP%/universal_runtime_silent/installer_log.txt``
+
+Notes:
+* Administrator rights required (the program auto-elevates if needed).
+* The flags ``--accept-source-agreements`` and ``--accept-package-agreements`` are added automatically to winget commands.
+* Already installed packages are skipped or upgraded when possible.
+

@@ -1,0 +1,61 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r "Universal runtime installer/requirements.txt"
+
+      - name: Build executable (PyInstaller)
+        working-directory: "Universal runtime installer"
+        run: |
+          pyinstaller --clean --noconfirm "Universal runtime installer.py" --icon logo.ico --name "Universal runtime installer" --add-data "logo.ico;." --distpath dist --workpath build
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-runtime-installer
+          path: |
+            Universal runtime installer/dist/**
+
+  release:
+    needs: build
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: universal-runtime-installer
+          path: dist
+      - name: Find EXE path
+        id: find_exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist -Filter '*.exe' -Recurse | Select-Object -First 1
+          if(-not $exe){ Write-Error 'No EXE found in dist'; exit 1 }
+          echo "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish Release (EXE only)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.find_exe.outputs.exe_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

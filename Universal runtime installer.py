@@ -7,6 +7,7 @@ import threading
 import queue
 import traceback
 import tempfile
+import time
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
@@ -378,31 +379,171 @@ def run_as_admin():
     sys.exit()
 
 
+# ----------------------------- SILENT MODE HELPERS -----------------------------
+
+def run_command_simple(command: str):
+    """Run a command returning (stdout, stderr, returncode)."""
+    proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = proc.communicate()
+    return out.decode('utf-8', errors='replace'), err.decode('utf-8', errors='replace'), proc.returncode
+
+
+def silent_log(msg: str, log_file_path: str):
+    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+    line = f"[{ts}] {msg}"
+    print(line)
+    try:
+        with open(log_file_path, 'a', encoding='utf-8') as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def build_program_list():
+    """Return the same program list used by GUI (duplicated to avoid GUI creation in silent)."""
+    return [
+        {"name": "DirectX", "command": ["winget install Microsoft.DirectX --force"], "group": "other"},
+        {"name": "Java Runtime", "command": ["winget install Oracle.JavaRuntimeEnvironment --force"], "group": "other"},
+        {"name": ".Net Runtime 8", "command": ["winget install Microsoft.DotNet.DesktopRuntime.8 --force"], "group": "other"},
+        {"name": "OpenAL", "command": ["winget install OpenAL.OpenAL --force"], "group": "other"},
+        {"name": "XNA Redist", "command": ["winget install Microsoft.XNARedist --force"], "group": "other"},
+        {"name": "VC - Redist 2010", "command": [
+            "winget install Microsoft.VCRedist.2010.x64 --force",
+            "winget install Microsoft.VCRedist.2010.x86 --force"
+        ], "group": "vc"},
+        {"name": "VC - Redist 2012", "command": [
+            "winget install Microsoft.VCRedist.2012.x64 --force",
+            "winget install Microsoft.VCRedist.2012x86 --force"
+        ], "group": "vc"},
+        {"name": "VC - Redist 2013", "command": [
+            "winget install Microsoft.VCRedist.2013.x64 --force",
+            "winget install Microsoft.VCRedist.2013.x86 --force"
+        ], "group": "vc"},
+        {"name": "VC - Redist 2015-2022", "command": [
+            "winget install Microsoft.VCRedist.2015+.x64 --force",
+            "winget install Microsoft.VCRedist.2015+.x86 --force"
+        ], "group": "vc"}
+    ]
+
+
+def add_winget_agreement_flags(cmd: str) -> str:
+    # Ensure agreement flags are present for unattended installs
+    flags = "--accept-source-agreements --accept-package-agreements"
+    if flags in cmd:
+        return cmd
+    return f"{cmd} {flags}"
+
+
+def silent_check_winget(log_file: str) -> bool:
+    silent_log("Checking winget...", log_file)
+    out, err, code = run_command_simple("winget --version")
+    if code != 0:
+        silent_log("winget not installed. Aborting silent install.", log_file)
+        return False
+    silent_log(f"winget version: {out.strip()}", log_file)
+    up_cmd = "winget upgrade --id Microsoft.Winget --accept-source-agreements --accept-package-agreements"
+    uo, ue, _ = run_command_simple(up_cmd)
+    lower_combined = (uo + ue).lower()
+    if "no applicable update" in lower_combined or "kein installiertes paket" in lower_combined:
+        silent_log("winget up to date.", log_file)
+    else:
+        if uo.strip():
+            silent_log("winget upgrade output: " + uo.strip(), log_file)
+        if ue.strip():
+            silent_log("winget upgrade stderr: " + ue.strip(), log_file)
+    return True
+
+
+def run_silent_install():
+    """Perform unattended installation of all predefined runtimes."""
+    # Prepare logging
+    temp_dir = tempfile.gettempdir()
+    work_dir = os.path.join(temp_dir, "universal_runtime_silent")
+    os.makedirs(work_dir, exist_ok=True)
+    os.chdir(work_dir)
+    log_file = os.path.join(work_dir, "installer_log.txt")
+    with open(log_file, 'w', encoding='utf-8') as f:
+        f.write("Universal Runtime Installer Silent Log\n")
+    silent_log("Starting silent installation...", log_file)
+    if not silent_check_winget(log_file):
+        return 1
+    programs = build_program_list()
+    failed = []
+    total = len(programs)
+    for idx, prog in enumerate(programs, 1):
+        if not isinstance(prog.get('command'), list):
+            continue
+        silent_log(f"[{idx}/{total}] Installing {prog['name']}...", log_file)
+        success = True
+        for raw_cmd in prog['command']:
+            cmd = add_winget_agreement_flags(raw_cmd)
+            out, err, code = run_command_simple(cmd)
+            if code != 0:
+                # Try upgrade path
+                if 'already installed' in (out + err).lower():
+                    silent_log(f"{prog['name']} already installed (detected).", log_file)
+                    continue
+                silent_log(f"Error installing {prog['name']}: {err.strip() or out.strip()} - attempting upgrade.", log_file)
+                up_cmd = add_winget_agreement_flags(cmd.replace('winget install', 'winget upgrade'))
+                uo, ue, ucode = run_command_simple(up_cmd)
+                if ucode != 0:
+                    silent_log(f"Upgrade failed for {prog['name']}: {ue.strip() or uo.strip()}", log_file)
+                    success = False
+                else:
+                    silent_log(f"{prog['name']} upgraded successfully.", log_file)
+            else:
+                if out.strip():
+                    silent_log(f"Output: {out.strip().splitlines()[-1]}", log_file)
+        if not success:
+            failed.append(prog['name'])
+        silent_log(f"Progress: {idx}/{total}", log_file)
+    if failed:
+        silent_log("Completed with errors. Failed: " + ', '.join(failed), log_file)
+        return 2
+    else:
+        silent_log("All installations completed successfully.", log_file)
+        return 0
+
+
 def main():
     try:
+        # Argument parsing (simple) for silent mode
+        args_lower = [a.lower() for a in sys.argv[1:]]
+        silent_requested = any(a in ("/silent", "-silent", "--silent", "/s", "-s") for a in args_lower)
+
+        if silent_requested:
+            # Ensure elevation first
+            if not is_admin():
+                run_as_admin()
+                return
+            exit_code = run_silent_install()
+            sys.exit(exit_code)
+
+        # GUI mode
         if not is_admin():
             run_as_admin()
-        else:
-            temp_dir = tempfile.gettempdir()
-            os.chdir(temp_dir)
-            temp_cmd_dir = os.path.join(temp_dir, "cmd_temp")
-            os.makedirs(temp_cmd_dir, exist_ok=True)
-            os.chdir(temp_cmd_dir)
-            print("Temporary CMD Working Directory set to:", os.getcwd())
-            with open("installer_log.txt", "w", encoding="utf-8") as log_file:
-                log_file.write("Installation Log\n")
-            root = ttk.Window(themename="flatly")
-            root.title("Universal Runtime Installer by Manily - Improved")
-            
-            icon_file = resource_path("logo.ico")
-            try:
-                root.iconbitmap(icon_file)
-            except Exception as e:
-                print("Error setting icon:", e)
-            
-            app = InstallerGUI(root)
-            root.after(100, app.process_queue)
-            root.mainloop()
+            return
+
+        temp_dir = tempfile.gettempdir()
+        os.chdir(temp_dir)
+        temp_cmd_dir = os.path.join(temp_dir, "cmd_temp")
+        os.makedirs(temp_cmd_dir, exist_ok=True)
+        os.chdir(temp_cmd_dir)
+        print("Temporary CMD Working Directory set to:", os.getcwd())
+        with open("installer_log.txt", "w", encoding="utf-8") as log_file:
+            log_file.write("Installation Log\n")
+        root = ttk.Window(themename="flatly")
+        root.title("Universal Runtime Installer by Manily - Improved")
+        
+        icon_file = resource_path("logo.ico")
+        try:
+            root.iconbitmap(icon_file)
+        except Exception as e:
+            print("Error setting icon:", e)
+        
+        app = InstallerGUI(root)
+        root.after(100, app.process_queue)
+        root.mainloop()
     except Exception:
         error_details = traceback.format_exc()
         messagebox.showerror("Fatal Error", f"An unhandled exception occurred:\n{error_details}")
